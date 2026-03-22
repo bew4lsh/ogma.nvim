@@ -2,7 +2,7 @@ local config = require("ogma.config")
 
 local M = {}
 
-function M.stream(text, callbacks)
+function M.spawn(text)
   local cfg = config.get()
   if not cfg.api_key then
     vim.notify("[ogma.nvim] no API key set (OPENAI_API_KEY or config.api_key)", vim.log.levels.ERROR)
@@ -17,33 +17,43 @@ function M.stream(text, callbacks)
     response_format = cfg.format,
   })
 
-  local handle = vim.fn.jobstart({
-    "curl", "--silent", "--no-buffer",
-    "--request", "POST",
-    "--url", "https://api.openai.com/v1/audio/speech",
-    "--header", "Content-Type: application/json",
-    "--header", "Authorization: Bearer " .. cfg.api_key,
-    "--data", body,
-  }, {
-    stdout_buffered = false,
-    on_stdout = function(_, data)
-      if callbacks.on_stdout then
-        callbacks.on_stdout(data)
-      end
-    end,
-    on_exit = function(_, code)
-      if callbacks.on_exit then
-        callbacks.on_exit(code)
-      end
-    end,
-  })
+  local stdout = vim.uv.new_pipe(false)
+  local stderr = vim.uv.new_pipe(false)
 
-  if handle <= 0 then
+  local handle
+  handle = vim.uv.spawn("curl", {
+    args = {
+      "--silent", "--no-buffer",
+      "--request", "POST",
+      "--url", "https://api.openai.com/v1/audio/speech",
+      "--header", "Content-Type: application/json",
+      "--header", "Authorization: Bearer " .. cfg.api_key,
+      "--data", body,
+    },
+    stdio = { nil, stdout, stderr },
+  }, function()
+    if not handle:is_closing() then
+      handle:close()
+    end
+  end)
+
+  if not handle then
+    stdout:close()
+    stderr:close()
     vim.notify("[ogma.nvim] failed to start curl", vim.log.levels.ERROR)
     return nil
   end
 
-  return handle
+  vim.uv.read_start(stderr, function(_, data)
+    if not data then
+      vim.uv.read_stop(stderr)
+      if not stderr:is_closing() then
+        stderr:close()
+      end
+    end
+  end)
+
+  return { handle = handle, stdout = stdout }
 end
 
 return M

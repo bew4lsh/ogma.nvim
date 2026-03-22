@@ -1,13 +1,20 @@
 local config = require("ogma.config")
 local state = require("ogma.state")
-local player = require("ogma.player")
+local platform = require("ogma.platform")
 local api = require("ogma.api")
 local cache = require("ogma.cache")
 
 local M = {}
 
+local function close_handle(h)
+  if h and not h:is_closing() then
+    h:close()
+  end
+end
+
 local function play_cached(path, on_done)
-  local handle = vim.fn.jobstart({ "mpv", "--no-video", "--no-terminal", path }, {
+  local ipc = platform.ipc_path()
+  local handle = vim.fn.jobstart({ "mpv", "--no-video", "--no-terminal", "--input-ipc-server=" .. ipc, path }, {
     on_exit = function(_, code)
       state.set("idle")
       if on_done then
@@ -16,7 +23,7 @@ local function play_cached(path, on_done)
     end,
   })
   if handle <= 0 then
-    vim.notify("[ogma.nvim] failed to start mpv for cached file", vim.log.levels.ERROR)
+    vim.notify("[ogma.nvim] failed to start mpv", vim.log.levels.ERROR)
     state.set("idle")
     if on_done then
       on_done(-1)
@@ -28,26 +35,34 @@ local function play_cached(path, on_done)
 end
 
 local function stream_and_play(text, bufnr, on_done)
-  local first_chunk = true
-  local errored = false
+  local ipc = platform.ipc_path()
+  local mpv_stdin = vim.uv.new_pipe(false)
   local cache_chunks = {}
-  local mpv_handle = nil
+  local errored = false
+  local first_chunk = true
 
-  mpv_handle = player.start(function(code)
-    state.set("idle")
-    if not errored then
-      local audio_data = table.concat(cache_chunks)
-      if #audio_data > 0 then
-        cache.put(text, bufnr, audio_data)
+  local mpv_handle, mpv_pid = vim.uv.spawn("mpv", {
+    args = { "--no-video", "--no-terminal", "--input-ipc-server=" .. ipc, "-" },
+    stdio = { mpv_stdin, nil, nil },
+  }, function(code)
+    close_handle(mpv_handle)
+    vim.schedule(function()
+      state.set("idle")
+      if not errored then
+        local audio_data = table.concat(cache_chunks)
+        if #audio_data > 0 then
+          cache.put(text, bufnr, audio_data)
+        end
       end
-    end
-    if on_done then
-      on_done(code)
-    end
+      if on_done then
+        on_done(code)
+      end
+    end)
   end)
 
   if not mpv_handle then
-    state.set("idle")
+    mpv_stdin:close()
+    vim.notify("[ogma.nvim] failed to start mpv", vim.log.levels.ERROR)
     if on_done then
       on_done(-1)
     end
@@ -56,48 +71,52 @@ local function stream_and_play(text, bufnr, on_done)
 
   state.set("playing")
 
-  local curl_handle = api.stream(text, {
-    on_stdout = function(data)
-      for _, chunk in ipairs(data) do
-        if chunk == "" then
-          goto continue
-        end
-
-        if first_chunk then
-          first_chunk = false
-          if chunk:sub(1, 1) == "{" then
-            errored = true
-            vim.schedule(function()
-              local ok, parsed = pcall(vim.json.decode, chunk)
-              local msg = ok and parsed.error and parsed.error.message or "API error"
-              vim.notify("[ogma.nvim] " .. msg, vim.log.levels.ERROR)
-            end)
-            player.stop(mpv_handle)
-            return
-          end
-        end
-
-        table.insert(cache_chunks, chunk)
-        player.write(mpv_handle, chunk)
-        ::continue::
-      end
-    end,
-    on_exit = function()
-      if not errored and mpv_handle then
-        player.close_stdin(mpv_handle)
-      end
-    end,
-  })
-
-  if not curl_handle then
-    player.stop(mpv_handle)
+  local curl = api.spawn(text)
+  if not curl then
+    vim.uv.shutdown(mpv_stdin, function()
+      close_handle(mpv_stdin)
+    end)
+    mpv_handle:kill("sigterm")
     if on_done then
       on_done(-1)
     end
     return nil
   end
 
-  return { mpv = mpv_handle, curl = curl_handle }
+  vim.uv.read_start(curl.stdout, function(err, data)
+    if err or not data then
+      vim.uv.read_stop(curl.stdout)
+      close_handle(curl.stdout)
+      vim.uv.shutdown(mpv_stdin, function()
+        close_handle(mpv_stdin)
+      end)
+      return
+    end
+
+    if first_chunk then
+      first_chunk = false
+      if data:sub(1, 1) == "{" then
+        errored = true
+        vim.schedule(function()
+          local ok, parsed = pcall(vim.json.decode, data)
+          local msg = ok and parsed.error and parsed.error.message or "API error"
+          vim.notify("[ogma.nvim] " .. msg, vim.log.levels.ERROR)
+        end)
+        vim.uv.read_stop(curl.stdout)
+        close_handle(curl.stdout)
+        vim.uv.shutdown(mpv_stdin, function()
+          close_handle(mpv_stdin)
+        end)
+        mpv_handle:kill("sigterm")
+        return
+      end
+    end
+
+    table.insert(cache_chunks, data)
+    vim.uv.write(mpv_stdin, data)
+  end)
+
+  return { curl = curl.handle, mpv = mpv_handle }
 end
 
 function M.speak(text, bufnr, on_done)

@@ -15,7 +15,7 @@ Speak text from Neovim using the OpenAI TTS API. Select text, fire a keymap, and
 
 ```lua
 {
-  "your-username/ogma.nvim",
+  "bew4lsh/ogma.nvim",
   config = function()
     require("ogma").setup({
       -- api_key = "sk-...",       -- or set OPENAI_API_KEY env var
@@ -33,7 +33,7 @@ Speak text from Neovim using the OpenAI TTS API. Select text, fire a keymap, and
 
 ```lua
 use {
-  "your-username/ogma.nvim",
+  "bew4lsh/ogma.nvim",
   config = function()
     require("ogma").setup()
   end,

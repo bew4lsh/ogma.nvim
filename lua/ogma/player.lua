@@ -3,52 +3,6 @@ local state = require("ogma.state")
 
 local M = {}
 
-function M.start(on_exit)
-  local ipc = platform.ipc_path()
-  local args = { "mpv", "--no-video", "--no-terminal", "--input-ipc-server=" .. ipc, "-" }
-
-  local handle = vim.fn.jobstart(args, {
-    on_exit = function(_, code)
-      M.cleanup_ipc()
-      if on_exit then
-        on_exit(code)
-      end
-    end,
-  })
-
-  if handle <= 0 then
-    vim.notify("[ogma.nvim] failed to start mpv", vim.log.levels.ERROR)
-    return nil
-  end
-
-  return handle
-end
-
-function M.write(handle, data)
-  if handle and type(data) == "string" then
-    vim.fn.chansend(handle, data)
-  end
-end
-
-function M.close_stdin(handle)
-  if handle then
-    pcall(vim.fn.chanclose, handle, "stdin")
-  end
-end
-
-function M.stop(handle)
-  if handle then
-    pcall(vim.fn.jobstop, handle)
-  end
-  M.cleanup_ipc()
-  state.set("idle")
-end
-
-function M.cleanup_ipc()
-  local ipc = platform.ipc_path()
-  pcall(vim.uv.fs_unlink, ipc)
-end
-
 local function send_ipc_command(cmd)
   local ipc = platform.ipc_path()
   local pipe = vim.uv.new_pipe(false)

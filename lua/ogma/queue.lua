@@ -1,11 +1,16 @@
 local pipeline = require("ogma.pipeline")
-local player = require("ogma.player")
 local state = require("ogma.state")
 
 local M = {}
 
 local items = {}
 local active_handles = nil
+
+local function kill(handle)
+  if handle then
+    pcall(function() handle:kill("sigterm") end)
+  end
+end
 
 local function play_next()
   if #items == 0 then
@@ -31,12 +36,8 @@ end
 function M.clear()
   items = {}
   if active_handles then
-    if active_handles.curl then
-      pcall(vim.fn.jobstop, active_handles.curl)
-    end
-    if active_handles.mpv then
-      player.stop(active_handles.mpv)
-    end
+    kill(active_handles.curl)
+    kill(active_handles.mpv)
     active_handles = nil
   end
   state.set("idle")
