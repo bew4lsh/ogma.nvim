@@ -34,6 +34,8 @@ function M.speak_line()
 end
 
 function M.speak_selection()
+  local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
+  vim.api.nvim_feedkeys(esc, "nx", false)
   queue.enqueue(text.visual_selection(), vim.api.nvim_get_current_buf())
 end
 
