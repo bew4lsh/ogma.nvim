@@ -15,7 +15,7 @@ function M.visual_selection()
   local start_pos = vim.fn.getpos("'<")
   local end_pos = vim.fn.getpos("'>")
   local mode = vim.fn.visualmode()
-  local regions = vim.fn.getregion(start_pos, end_pos, { type = mode })
+  local regions = vim.fn.getregion(start_pos, end_pos, { mode = mode })
   return clean(table.concat(regions, "\n"))
 end
 
