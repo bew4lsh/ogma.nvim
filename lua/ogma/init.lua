@@ -22,7 +22,7 @@ function M.setup(opts)
 
   local km = config.get().keymaps
   map("n", km.speak_line, M.speak_line, "Ogma: speak line")
-  map("v", km.speak_selection, M.speak_selection, "Ogma: speak selection")
+  map("v", km.speak_selection, ":<C-u>lua require('ogma').speak_selection()<CR>", "Ogma: speak selection")
   map("n", km.speak_paragraph, M.speak_paragraph, "Ogma: speak paragraph")
   map("n", km.speak_buffer, M.speak_buffer, "Ogma: speak buffer")
   map("n", km.toggle_pause, M.toggle_pause, "Ogma: toggle pause")
@@ -34,8 +34,6 @@ function M.speak_line()
 end
 
 function M.speak_selection()
-  local esc = vim.api.nvim_replace_termcodes("<Esc>", true, false, true)
-  vim.api.nvim_feedkeys(esc, "nx", false)
   queue.enqueue(text.visual_selection(), vim.api.nvim_get_current_buf())
 end
 
