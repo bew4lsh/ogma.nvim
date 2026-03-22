@@ -7,7 +7,12 @@ local items = {}
 local active_handles = nil
 
 local function kill(handle)
-  if handle then
+  if not handle then
+    return
+  end
+  if type(handle) == "number" then
+    pcall(vim.fn.jobstop, handle)
+  else
     pcall(function() handle:kill("sigterm") end)
   end
 end

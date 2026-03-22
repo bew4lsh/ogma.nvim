@@ -45,8 +45,8 @@ local function stream_and_play(text, bufnr, on_done)
     args = { "--no-video", "--no-terminal", "--input-ipc-server=" .. ipc, "-" },
     stdio = { mpv_stdin, nil, nil },
   }, function(code)
-    close_handle(mpv_handle)
     vim.schedule(function()
+      close_handle(mpv_handle)
       state.set("idle")
       if not errored then
         local audio_data = table.concat(cache_chunks)
