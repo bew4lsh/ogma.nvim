@@ -92,7 +92,7 @@ Add playback state to your statusline:
 
 ```lua
 require("ogma").statusline()
--- returns "" when idle, "[Ogma:playing]" or "[Ogma:paused]" otherwise
+-- returns "" when idle, "󰔊 Speaking" or "󰏤 Paused" otherwise
 ```
 
 Example with lualine:

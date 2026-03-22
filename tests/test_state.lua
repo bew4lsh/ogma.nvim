@@ -53,10 +53,16 @@ T["statusline()"]["returns empty string when idle"] = function()
   eq(state.statusline(), "")
 end
 
-T["statusline()"]["returns formatted string when playing"] = function()
+T["statusline()"]["returns icon when playing"] = function()
   local state = require("ogma.state")
   state.set("playing")
-  eq(state.statusline(), "[Ogma:playing]")
+  eq(state.statusline(), "󰔊 Speaking")
+end
+
+T["statusline()"]["returns icon when paused"] = function()
+  local state = require("ogma.state")
+  state.set("paused")
+  eq(state.statusline(), "󰏤 Paused")
 end
 
 return T
